@@ -201,7 +201,7 @@ func parseConfig(raw map[string]any, workflowDir string) (*Config, error) {
 
 	// If workspace root is still empty, use a temp directory default.
 	if cfg.Workspace.Root == "" {
-		cfg.Workspace.Root = filepath.Join(os.TempDir(), "symphony_workspaces")
+		cfg.Workspace.Root = filepath.Join(os.TempDir(), "nimbus_workspaces")
 	}
 
 	// If personas directory is relative and wasn't resolved, resolve it now.

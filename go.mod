@@ -1,4 +1,4 @@
-module github.com/anthropics/symphony
+module github.com/siddhant2408/nimbus
 
 go 1.25.0
 

@@ -6,11 +6,11 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/anthropics/symphony/internal/codex"
-	"github.com/anthropics/symphony/internal/config"
-	"github.com/anthropics/symphony/internal/domain"
-	"github.com/anthropics/symphony/internal/persona"
-	"github.com/anthropics/symphony/internal/workspace"
+	"github.com/siddhant2408/nimbus/internal/codex"
+	"github.com/siddhant2408/nimbus/internal/config"
+	"github.com/siddhant2408/nimbus/internal/domain"
+	"github.com/siddhant2408/nimbus/internal/persona"
+	"github.com/siddhant2408/nimbus/internal/workspace"
 )
 
 // RunnerDeps holds injected dependencies for the agent runner.

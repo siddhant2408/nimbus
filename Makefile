@@ -2,7 +2,7 @@
 
 # Build the binary with embedded frontend assets.
 build: frontend
-	go build -o bin/symphony ./cmd/symphony
+	go build -o bin/nimbus ./cmd/nimbus
 
 # Build frontend assets.
 frontend:
@@ -10,7 +10,7 @@ frontend:
 
 # Run the binary in dev mode.
 dev:
-	go run ./cmd/symphony $(ARGS)
+	go run ./cmd/nimbus $(ARGS)
 
 # Run all Go tests.
 test:

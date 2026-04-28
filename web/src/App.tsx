@@ -28,7 +28,7 @@ export default function App() {
           <div className="flex items-center justify-between h-14">
             <div className="flex items-center gap-6">
               <h1 className="text-lg font-semibold tracking-tight text-white">
-                Symphony
+                Nimbus
               </h1>
               <nav className="flex items-center gap-1">
                 <NavItem to="/">Dashboard</NavItem>

@@ -8,7 +8,7 @@ import (
 	"os/exec"
 	"time"
 
-	"github.com/anthropics/symphony/internal/config"
+	"github.com/siddhant2408/nimbus/internal/config"
 )
 
 // maxHookOutputBytes is the maximum number of bytes of combined stdout+stderr

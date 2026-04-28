@@ -13,8 +13,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/anthropics/symphony/internal/config"
-	"github.com/anthropics/symphony/internal/domain"
+	"github.com/siddhant2408/nimbus/internal/config"
+	"github.com/siddhant2408/nimbus/internal/domain"
 )
 
 const (
@@ -24,7 +24,7 @@ const (
 
 // GraphQL query for polling candidate issues by project + state, with cursor pagination.
 const queryPoll = `
-query SymphonyLinearPoll($projectSlug: String!, $stateNames: [String!]!, $first: Int!, $relationFirst: Int!, $after: String) {
+query NimbusLinearPoll($projectSlug: String!, $stateNames: [String!]!, $first: Int!, $relationFirst: Int!, $after: String) {
   issues(filter: {project: {slugId: {eq: $projectSlug}}, state: {name: {in: $stateNames}}}, first: $first, after: $after) {
     nodes {
       id
@@ -70,7 +70,7 @@ query SymphonyLinearPoll($projectSlug: String!, $stateNames: [String!]!, $first:
 
 // GraphQL query for fetching issues by their IDs (no cursor pagination, batched by caller).
 const queryByIDs = `
-query SymphonyLinearIssuesById($ids: [ID!]!, $first: Int!, $relationFirst: Int!) {
+query NimbusLinearIssuesById($ids: [ID!]!, $first: Int!, $relationFirst: Int!) {
   issues(filter: {id: {in: $ids}}, first: $first) {
     nodes {
       id
@@ -112,7 +112,7 @@ query SymphonyLinearIssuesById($ids: [ID!]!, $first: Int!, $relationFirst: Int!)
 
 // GraphQL query for resolving the current viewer's identity (for assignee="me").
 const queryViewer = `
-query SymphonyLinearViewer {
+query NimbusLinearViewer {
   viewer {
     id
   }

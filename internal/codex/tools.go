@@ -56,7 +56,7 @@ func (td *toolDispatcher) executeLinearGraphQL(arguments map[string]any) map[str
 	if td.graphqlExec == nil {
 		return failureResponse(map[string]any{
 			"error": map[string]any{
-				"message": "Symphony is missing Linear auth. Set `linear.api_key` in `WORKFLOW.md` or export `LINEAR_API_KEY`.",
+				"message": "Nimbus is missing Linear auth. Set `linear.api_key` in `WORKFLOW.md` or export `LINEAR_API_KEY`.",
 			},
 		})
 	}
@@ -210,7 +210,7 @@ func DefaultToolSpecs() []ToolSpec {
 	return []ToolSpec{
 		{
 			Name:        "linear_graphql",
-			Description: "Execute a raw GraphQL query or mutation against Linear using Symphony's configured auth.",
+			Description: "Execute a raw GraphQL query or mutation against Linear using Nimbus's configured auth.",
 			InputSchema: map[string]any{
 				"type":                 "object",
 				"additionalProperties": false,

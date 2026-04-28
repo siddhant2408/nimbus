@@ -6,10 +6,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/anthropics/symphony/internal/config"
-	"github.com/anthropics/symphony/internal/domain"
-	"github.com/anthropics/symphony/internal/tracker"
-	"github.com/anthropics/symphony/internal/workspace"
+	"github.com/siddhant2408/nimbus/internal/config"
+	"github.com/siddhant2408/nimbus/internal/domain"
+	"github.com/siddhant2408/nimbus/internal/tracker"
+	"github.com/siddhant2408/nimbus/internal/workspace"
 )
 
 // RunnerFunc is the signature for spawning agent worker goroutines.

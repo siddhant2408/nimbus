@@ -4,7 +4,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/anthropics/symphony/internal/domain"
+	"github.com/siddhant2408/nimbus/internal/domain"
 )
 
 const (

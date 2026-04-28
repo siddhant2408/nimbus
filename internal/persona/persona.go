@@ -1,8 +1,8 @@
 package persona
 
 import (
-	"github.com/anthropics/symphony/internal/codex"
-	"github.com/anthropics/symphony/internal/config"
+	"github.com/siddhant2408/nimbus/internal/codex"
+	"github.com/siddhant2408/nimbus/internal/config"
 )
 
 // Persona represents a named agent identity. SPEC Appendix B.4.1.

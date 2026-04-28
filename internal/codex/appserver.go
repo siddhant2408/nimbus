@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/anthropics/symphony/internal/config"
-	"github.com/anthropics/symphony/internal/domain"
+	"github.com/siddhant2408/nimbus/internal/config"
+	"github.com/siddhant2408/nimbus/internal/domain"
 )
 
 // lineResult is the value sent through the shared line-reading channel.
@@ -24,7 +24,7 @@ type lineResult struct {
 
 // Session represents a running Codex app-server subprocess with an established
 // JSON-RPC session (initialized + thread started). It corresponds to the Elixir
-// session struct in SymphonyElixir.Codex.AppServer.
+// session struct in NimbusElixir.Codex.AppServer.
 type Session struct {
 	cmd    *exec.Cmd
 	writer *protoWriter
@@ -242,8 +242,8 @@ func (s *Session) initialize() error {
 				"experimentalApi": true,
 			},
 			"clientInfo": map[string]any{
-				"name":    "symphony-orchestrator",
-				"title":   "Symphony Orchestrator",
+				"name":    "nimbus-orchestrator",
+				"title":   "Nimbus Orchestrator",
 				"version": "0.1.0",
 			},
 		},

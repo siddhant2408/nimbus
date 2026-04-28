@@ -13,24 +13,24 @@ import (
 
 	"io/fs"
 
-	"github.com/anthropics/symphony/internal/agent"
-	"github.com/anthropics/symphony/internal/codex"
-	"github.com/anthropics/symphony/internal/config"
-	"github.com/anthropics/symphony/internal/domain"
-	"github.com/anthropics/symphony/internal/orchestrator"
-	"github.com/anthropics/symphony/internal/persona"
-	"github.com/anthropics/symphony/internal/server"
-	"github.com/anthropics/symphony/internal/tracker/linear"
-	"github.com/anthropics/symphony/internal/workspace"
-	"github.com/anthropics/symphony/web"
+	"github.com/siddhant2408/nimbus/internal/agent"
+	"github.com/siddhant2408/nimbus/internal/codex"
+	"github.com/siddhant2408/nimbus/internal/config"
+	"github.com/siddhant2408/nimbus/internal/domain"
+	"github.com/siddhant2408/nimbus/internal/orchestrator"
+	"github.com/siddhant2408/nimbus/internal/persona"
+	"github.com/siddhant2408/nimbus/internal/server"
+	"github.com/siddhant2408/nimbus/internal/tracker/linear"
+	"github.com/siddhant2408/nimbus/internal/workspace"
+	"github.com/siddhant2408/nimbus/web"
 )
 
 func main() {
 	port := flag.Int("port", -1, "HTTP server port (overrides server.port in WORKFLOW.md)")
 	logsRoot := flag.String("logs-root", "", "Log file directory")
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: symphony [OPTIONS] [path-to-WORKFLOW.md]\n\n")
-		fmt.Fprintf(os.Stderr, "Symphony orchestrates coding agents for project work.\n\n")
+		fmt.Fprintf(os.Stderr, "Usage: nimbus [OPTIONS] [path-to-WORKFLOW.md]\n\n")
+		fmt.Fprintf(os.Stderr, "Nimbus orchestrates coding agents for project work.\n\n")
 		fmt.Fprintf(os.Stderr, "Options:\n")
 		flag.PrintDefaults()
 	}
@@ -53,7 +53,7 @@ func main() {
 	// Configure logging.
 	configureLogging(*logsRoot)
 
-	slog.Info("starting symphony",
+	slog.Info("starting nimbus",
 		"workflow", absPath,
 		"pid", os.Getpid(),
 	)
@@ -174,7 +174,7 @@ func main() {
 	)
 	orch.Run(ctx)
 
-	slog.Info("symphony stopped")
+	slog.Info("nimbus stopped")
 }
 
 func configureLogging(logsRoot string) {
@@ -188,7 +188,7 @@ func configureLogging(logsRoot string) {
 		if err := os.MkdirAll(logsRoot, 0755); err != nil {
 			fatal("create logs directory: %v", err)
 		}
-		logFile := filepath.Join(logsRoot, "symphony.log")
+		logFile := filepath.Join(logsRoot, "nimbus.log")
 		f, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 		if err != nil {
 			fatal("open log file: %v", err)
@@ -202,6 +202,6 @@ func configureLogging(logsRoot string) {
 }
 
 func fatal(format string, args ...any) {
-	fmt.Fprintf(os.Stderr, "symphony: "+format+"\n", args...)
+	fmt.Fprintf(os.Stderr, "nimbus: "+format+"\n", args...)
 	os.Exit(1)
 }

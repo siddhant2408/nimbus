@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/anthropics/symphony/internal/domain"
+	"github.com/siddhant2408/nimbus/internal/domain"
 )
 
 // Assignment represents a persona-to-issue mapping. SPEC B.4.2.
@@ -28,7 +28,7 @@ type AssignmentStore struct {
 
 // NewAssignmentStore creates or loads a persona assignment store.
 func NewAssignmentStore(workspaceRoot string) *AssignmentStore {
-	dir := filepath.Join(workspaceRoot, ".symphony")
+	dir := filepath.Join(workspaceRoot, ".nimbus")
 	path := filepath.Join(dir, "persona_assignments.json")
 
 	store := &AssignmentStore{

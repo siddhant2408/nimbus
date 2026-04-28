@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/anthropics/symphony/internal/config"
+	"github.com/siddhant2408/nimbus/internal/config"
 )
 
 // reconcileRunningIssues performs stall detection and tracker state refresh.

@@ -1,6 +1,6 @@
-# Symphony — Go + TypeScript Implementation
+# Nimbus — Go + TypeScript Implementation
 
-Symphony is a long-running orchestration service that polls a Linear project tracker for issues, creates isolated workspaces, and dispatches Codex coding agents to work on them autonomously. This directory contains the complete Go backend + TypeScript frontend implementation, faithful to `SPEC.md` (~2975 lines).
+Nimbus is a long-running orchestration service that polls a Linear project tracker for issues, creates isolated workspaces, and dispatches Codex coding agents to work on them autonomously. This directory contains the complete Go backend + TypeScript frontend implementation, faithful to `SPEC.md` (~2975 lines).
 
 ## Quick Reference
 
@@ -22,7 +22,7 @@ cd web && npx tsc --noEmit
 make clean
 ```
 
-**Binary:** `./bin/symphony [--port PORT] [--logs-root DIR] [path-to-WORKFLOW.md]`
+**Binary:** `./bin/nimbus [--port PORT] [--logs-root DIR] [path-to-WORKFLOW.md]`
 
 Default workflow path is `./WORKFLOW.md`. If `--port` is set (or `server.port` is in config), the dashboard is served at that port.
 
@@ -57,7 +57,7 @@ Events flow into the orchestrator via typed channels:
 
 ```
 go/
-├── cmd/symphony/main.go              # CLI entry, wiring, signal handling
+├── cmd/nimbus/main.go              # CLI entry, wiring, signal handling
 ├── internal/
 │   ├── domain/                        # Core types (no business logic)
 │   │   ├── issue.go                   #   Issue, BlockerRef
@@ -162,8 +162,8 @@ WORKFLOW.md is a markdown file with YAML front matter between `---` fences. The 
 
 Implements `tracker.Tracker` interface. Two primary GraphQL queries:
 
-- **`SymphonyLinearPoll`:** Cursor-paginated (page_size=50) fetch of issues by project slug + active states. Extracts `state.name`, lowercased labels, blockers from `inverseRelations` where `type=="blocks"`.
-- **`SymphonyLinearIssuesById`:** Batch fetch by IDs (batched in groups of 50) for reconciliation state refresh.
+- **`NimbusLinearPoll`:** Cursor-paginated (page_size=50) fetch of issues by project slug + active states. Extracts `state.name`, lowercased labels, blockers from `inverseRelations` where `type=="blocks"`.
+- **`NimbusLinearIssuesById`:** Batch fetch by IDs (batched in groups of 50) for reconciliation state refresh.
 
 The `GraphQL()` method is exported and reused by the `linear_graphql` dynamic tool in the Codex session.
 
@@ -238,7 +238,7 @@ Implements SPEC Appendix B.
 - **Registry:** Scans a directory for `.md` files. Name must match filename stem. Validates `[a-z0-9-]` format and no simultaneous allow+deny tool lists. Supports full CRUD (writes back to `.md` files).
 - **Assignment resolution (B.5.3):**
   1. Check issue labels for `persona:<name>` prefix → resolve against registry
-  2. Fall back to local JSON persistence (`<workspace_root>/.symphony/persona_assignments.json`)
+  2. Fall back to local JSON persistence (`<workspace_root>/.nimbus/persona_assignments.json`)
   3. No persona = backward-compatible (no overrides, no persona prompt)
 - **Config merge (B.6):** Shallow overlay — persona overrides `max_turns`, `approval_policy`, `model`, `turn_timeout_ms`.
 - **Tool filtering (B.12.5):** Allowlist mode (only named tools) or denylist mode (all except named).
@@ -302,7 +302,7 @@ tracker:
 polling:
   interval_ms: 15000
 workspace:
-  root: ~/symphony-workspaces
+  root: ~/nimbus-workspaces
 agent:
   max_concurrent_agents: 5
   max_turns: 10

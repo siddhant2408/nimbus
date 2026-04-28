@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/anthropics/symphony/internal/config"
-	"github.com/anthropics/symphony/internal/domain"
+	"github.com/siddhant2408/nimbus/internal/config"
+	"github.com/siddhant2408/nimbus/internal/domain"
 )
 
 // shouldDispatch checks all dispatch eligibility rules. SPEC Section 8.2.
