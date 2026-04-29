@@ -83,10 +83,10 @@ Work in the repository. Create a branch, implement the changes, commit, and push
 export LINEAR_API_KEY="lin_api_..."
 
 # Start Nimbus
-./bin/nimbus --port 8080 WORKFLOW.md
+make start
 ```
 
-Open `http://localhost:8080` for the dashboard.
+Open `http://localhost:9090` for the dashboard.
 
 ## CLI
 
