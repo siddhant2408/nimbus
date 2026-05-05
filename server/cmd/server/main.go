@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"os"
 
 	"github.com/siddhant2408/nimbus/internal/logger"
@@ -14,7 +15,7 @@ func main() {
 	logger.Init()
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
-		dbURL = "postgres://multica:multica@localhost:5432/multica?sslmode=disable"
+		dbURL = "postgres://nimbus:nimbus@localhost:5433/nimbus?sslmode=disable"
 	}
 
 	// Connect to database
@@ -32,4 +33,21 @@ func main() {
 	}
 	slog.Info("connected to database")
 	logPoolConfig(pool)
+
+	// router
+	r := newRouterWithOptions(pool, routerOptions{})
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	srv := &http.Server{
+		Addr:    ":" + port,
+		Handler: r,
+	}
+	slog.Info("server starting", "port", port)
+	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		slog.Error("server error", "error", err)
+		os.Exit(1)
+	}
 }

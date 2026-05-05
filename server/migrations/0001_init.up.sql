@@ -240,6 +240,7 @@ CREATE TABLE public.chat_session (
     title text DEFAULT ''::text NOT NULL,
     session_id text,
     work_dir text,
+    runtime_id uuid,
     status text DEFAULT 'active'::text NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
@@ -1762,6 +1763,14 @@ ALTER TABLE ONLY public.chat_session
 
 ALTER TABLE ONLY public.chat_session
     ADD CONSTRAINT chat_session_workspace_id_fkey FOREIGN KEY (workspace_id) REFERENCES public.workspace(id) ON DELETE CASCADE;
+
+
+--
+-- Name: chat_session chat_session_runtime_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.chat_session
+    ADD CONSTRAINT chat_session_runtime_id_fkey FOREIGN KEY (runtime_id) REFERENCES public.agent_runtime(id) ON DELETE SET NULL;
 
 
 --

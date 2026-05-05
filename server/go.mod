@@ -3,6 +3,7 @@ module github.com/siddhant2408/nimbus
 go 1.26.1
 
 require (
+	github.com/go-chi/chi v1.5.5
 	github.com/go-chi/chi/v5 v5.2.5
 	github.com/jackc/pgx/v5 v5.8.0
 	github.com/lmittmann/tint v1.1.3
