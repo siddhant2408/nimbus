@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/siddhant2408/nimbus/internal/events"
 	"github.com/siddhant2408/nimbus/internal/logger"
 )
 
@@ -34,8 +35,9 @@ func main() {
 	slog.Info("connected to database")
 	logPoolConfig(pool)
 
+	bus := events.New()
 	// router
-	r := newRouterWithOptions(pool, routerOptions{})
+	r := newRouterWithOptions(pool, bus, routerOptions{})
 
 	port := os.Getenv("PORT")
 	if port == "" {

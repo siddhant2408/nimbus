@@ -33,6 +33,20 @@ services:
       PORT: "${PORT:-8080}"
     restart: unless-stopped
 
+  frontend:
+    image: nimbus-web:dev
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+      args:
+        REMOTE_API_URL: http://backend:8081
+        NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-}
+        NEXT_PUBLIC_APP_VERSION: dev
+    ports:
+      - "3001:3001"
+    depends_on:
+      - backend
+
 volumes:
   pgdata:
   backend_uploads:
