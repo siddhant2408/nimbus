@@ -2,9 +2,13 @@ package handler
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/siddhant2408/nimbus/internal/logger"
 	db "github.com/siddhant2408/nimbus/pkg/db/generated"
+	"github.com/siddhant2408/nimbus/pkg/protocol"
 )
 
 // Upper bound on free-text fields. `cloudWaitlistReasonMaxLen` is a
@@ -59,16 +63,6 @@ func (h *Handler) CompleteOnboarding(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "invalid request body")
 			return
 		}
-	}
-
-	// Read the prior state so we can detect "was this call the one that
-	// actually completed onboarding?" — MarkUserOnboarded uses COALESCE
-	// and returns the preserved timestamp on repeat calls, which is not
-	// the signal we need for the funnel.
-	_, err := h.Queries.GetUser(r.Context(), parseUUID(userID))
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to load user")
-		return
 	}
 
 	user, err := h.Queries.MarkUserOnboarded(r.Context(), parseUUID(userID))
@@ -229,4 +223,349 @@ type importStarterContentResponse struct {
 	User           UserResponse `json:"user"`
 	ProjectID      string       `json:"project_id"`
 	WelcomeIssueID *string      `json:"welcome_issue_id"`
+}
+
+// ImportStarterContent creates the Getting Started project, optional
+// welcome issue, sub-issues, and pins — all inside a single transaction
+// gated by the atomic NULL -> 'imported' state transition. Idempotent
+// at the state level: any second call returns 409 with the already-set
+// state, no duplicate content created.
+func (h *Handler) ImportStarterContent(w http.ResponseWriter, r *http.Request) {
+	userID, ok := requireUserID(w, r)
+	if !ok {
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, importStarterContentBodyLimit)
+	var req importStarterContentRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.WorkspaceID == "" {
+		writeError(w, http.StatusBadRequest, "workspace_id is required")
+		return
+	}
+	// Reject malformed UUIDs up front and reuse the parsed value for every
+	// write below so a garbage workspace_id never reaches CreateProject /
+	// CreateIssue.
+	wsUUID, ok := parseUUIDOrBadRequest(w, req.WorkspaceID, "workspace_id")
+	if !ok {
+		return
+	}
+	req.WorkspaceID = uuidToString(wsUUID)
+	if req.Project.Title == "" {
+		writeError(w, http.StatusBadRequest, "project.title is required")
+		return
+	}
+
+	// Start the transaction early — the state claim lives inside it so
+	// concurrent imports from another tab can't both pass the check.
+	tx, err := h.TxStarter.Begin(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to begin transaction")
+		return
+	}
+	defer tx.Rollback(r.Context())
+	qtx := h.Queries.WithTx(tx)
+
+	// Claim step: user must be NULL (never asked) to proceed. A value
+	// of 'imported' / 'dismissed' / 'skipped_legacy' all short-circuit
+	// with 409 Conflict — the caller should close the dialog and
+	// refresh the user to pick up the already-final state.
+	user, err := qtx.GetUser(r.Context(), parseUUID(userID))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load user")
+		return
+	}
+	if user.StarterContentState.Valid {
+		writeJSON(w, http.StatusConflict, map[string]any{
+			"error": "starter content already decided",
+			"state": user.StarterContentState.String,
+		})
+		return
+	}
+
+	// Membership check: user must belong to the target workspace.
+	// `actorID` below is `parseUUID(userID)` — stored as `creator_id`
+	// and `assignee_id` for `type="member"` to match the app-wide
+	// convention (AssigneePicker + resolveActor). Storing `member.id`
+	// would cause `useActorName.getMemberName` to resolve to "Unknown"
+	// since members are looked up by `user_id`.
+	if _, err := qtx.GetMemberByUserAndWorkspace(r.Context(), db.GetMemberByUserAndWorkspaceParams{
+		UserID:      parseUUID(userID),
+		WorkspaceID: wsUUID,
+	}); err != nil {
+		writeError(w, http.StatusForbidden, "not a member of this workspace")
+		return
+	}
+	actorID := parseUUID(userID)
+
+	// --- Branch decision (server-authoritative) ---
+	// Ask the DB — not the client — whether there's an agent in this
+	// workspace. `ListAgents` orders by created_at ASC, so "agents[0]"
+	// is deterministically the earliest-created agent. This replaces
+	// the old client-supplied `welcome_issue.agent_id` trust chain.
+	agents, err := qtx.ListAgents(r.Context(), wsUUID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list agents")
+		return
+	}
+	hasAgent := len(agents) > 0
+	var welcomeAgentID pgtype.UUID
+	if hasAgent {
+		welcomeAgentID = agents[0].ID
+	}
+	subSpecs := req.SelfServeSubIssues
+	if hasAgent {
+		subSpecs = req.AgentGuidedSubIssues
+	}
+
+	// --- Create project ---
+	project, err := qtx.CreateProject(r.Context(), db.CreateProjectParams{
+		WorkspaceID: wsUUID,
+		Title:       req.Project.Title,
+		Description: strOrNullText(req.Project.Description),
+		Icon:        strOrNullText(req.Project.Icon),
+		Status:      "planned",
+		Priority:    "none",
+	})
+	if err != nil {
+		slog.Warn("import starter content: create project failed", append(logger.RequestAttrs(r), "error", err)...)
+		writeError(w, http.StatusInternalServerError, "failed to create project")
+		return
+	}
+
+	// --- Create welcome issue (only when an agent exists) ---
+	var welcomeIssueID *string
+	var welcomeIssueForEvent *db.Issue
+	if hasAgent && req.WelcomeIssueTemplate.Title != "" {
+		welcomeNumber, err := qtx.IncrementIssueCounter(r.Context(), wsUUID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to allocate issue number")
+			return
+		}
+		priority := req.WelcomeIssueTemplate.Priority
+		if priority == "" {
+			priority = "high"
+		}
+		welcome, err := qtx.CreateIssue(r.Context(), db.CreateIssueParams{
+			WorkspaceID:  wsUUID,
+			Title:        req.WelcomeIssueTemplate.Title,
+			Description:  strOrNullText(req.WelcomeIssueTemplate.Description),
+			Status:       "todo",
+			Priority:     priority,
+			AssigneeType: pgtype.Text{String: "agent", Valid: true},
+			AssigneeID:   welcomeAgentID,
+			CreatorType:  "member",
+			CreatorID:    actorID,
+			Number:       welcomeNumber,
+		})
+		if err != nil {
+			slog.Warn("import starter content: create welcome issue failed", append(logger.RequestAttrs(r), "error", err)...)
+			writeError(w, http.StatusInternalServerError, "failed to create welcome issue")
+			return
+		}
+		id := uuidToString(welcome.ID)
+		welcomeIssueID = &id
+		copy := welcome
+		welcomeIssueForEvent = &copy
+	}
+
+	// --- Create sub-issues (branch picked above) ---
+	subIssuesCreated := make([]db.Issue, 0, len(subSpecs))
+	for _, sub := range subSpecs {
+		if sub.Title == "" {
+			continue
+		}
+		number, err := qtx.IncrementIssueCounter(r.Context(), wsUUID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to allocate issue number")
+			return
+		}
+		var assigneeType pgtype.Text
+		var assigneeID pgtype.UUID
+		if sub.AssignToSelf {
+			assigneeType = pgtype.Text{String: "member", Valid: true}
+			assigneeID = actorID
+		}
+		status := sub.Status
+		if status == "" {
+			status = "backlog"
+		}
+		priority := sub.Priority
+		if priority == "" {
+			priority = "none"
+		}
+		issue, err := qtx.CreateIssue(r.Context(), db.CreateIssueParams{
+			WorkspaceID:  wsUUID,
+			Title:        sub.Title,
+			Description:  strOrNullText(sub.Description),
+			Status:       status,
+			Priority:     priority,
+			AssigneeType: assigneeType,
+			AssigneeID:   assigneeID,
+			CreatorType:  "member",
+			CreatorID:    actorID,
+			Number:       number,
+			ProjectID:    project.ID,
+		})
+		if err != nil {
+			slog.Warn("import starter content: create sub-issue failed", append(logger.RequestAttrs(r), "error", err, "title", sub.Title)...)
+			writeError(w, http.StatusInternalServerError, "failed to create sub-issues")
+			return
+		}
+		subIssuesCreated = append(subIssuesCreated, issue)
+	}
+
+	// --- Pin project (and welcome issue if present) ---
+	// Non-fatal: a pin failure shouldn't prevent the onboarding bundle
+	// from landing. We warn and move on. Pointers to the created rows
+	// are kept around for post-commit `pin:created` fan-out so the
+	// sidebar refreshes without a manual reload.
+	pinnedProjectPos := float64(1)
+	var pinProjectForEvent *db.PinnedItem
+	pinProject, err := qtx.CreatePinnedItem(r.Context(), db.CreatePinnedItemParams{
+		WorkspaceID: wsUUID,
+		UserID:      parseUUID(userID),
+		ItemType:    "project",
+		ItemID:      project.ID,
+		Position:    pinnedProjectPos,
+	})
+	if err != nil {
+		slog.Warn("import starter content: pin project failed", append(logger.RequestAttrs(r), "error", err)...)
+	} else {
+		pinProjectForEvent = &pinProject
+	}
+	var pinWelcomeIssueForEvent *db.PinnedItem
+	if welcomeIssueForEvent != nil {
+		pinWelcome, err := qtx.CreatePinnedItem(r.Context(), db.CreatePinnedItemParams{
+			WorkspaceID: wsUUID,
+			UserID:      parseUUID(userID),
+			ItemType:    "issue",
+			ItemID:      welcomeIssueForEvent.ID,
+			Position:    pinnedProjectPos + 1,
+		})
+		if err != nil {
+			slog.Warn("import starter content: pin welcome issue failed", append(logger.RequestAttrs(r), "error", err)...)
+		} else {
+			pinWelcomeIssueForEvent = &pinWelcome
+		}
+	}
+
+	// --- Flip state ---
+	updatedUser, err := qtx.SetStarterContentState(r.Context(), db.SetStarterContentStateParams{
+		ID:                  parseUUID(userID),
+		StarterContentState: pgtype.Text{String: "imported", Valid: true},
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to record starter content state")
+		return
+	}
+
+	if err := tx.Commit(r.Context()); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to commit starter content")
+		return
+	}
+
+	// --- Post-commit: realtime events + agent task enqueue ---
+	// Realtime fan-out happens here (not inside the tx) because the DB
+	// commit must land first — otherwise subscribers could receive an
+	// event for state that's about to be rolled back.
+	projectResp := projectToResponse(project)
+	h.publish(protocol.EventProjectCreated, req.WorkspaceID, "member", userID, map[string]any{"project": projectResp})
+
+	workspacePrefix := h.getIssuePrefix(r.Context(), wsUUID)
+	if welcomeIssueForEvent != nil {
+		welcomeResp := issueToResponse(*welcomeIssueForEvent, workspacePrefix)
+		h.publish(protocol.EventIssueCreated, req.WorkspaceID, "member", userID, map[string]any{"issue": welcomeResp})
+		// if h.shouldEnqueueAgentTask(r.Context(), *welcomeIssueForEvent) {
+		// 	h.TaskService.EnqueueTaskForIssue(r.Context(), *welcomeIssueForEvent)
+		// }
+	}
+	for _, sub := range subIssuesCreated {
+		subResp := issueToResponse(sub, workspacePrefix)
+		h.publish(protocol.EventIssueCreated, req.WorkspaceID, "member", userID, map[string]any{"issue": subResp})
+	}
+	// Pin events. Without these, the sidebar's `pinListOptions` query
+	// stays cached on the pre-import snapshot — only a hard refresh
+	// surfaces the new pins. Same payload shape as `POST /pins`.
+	if pinProjectForEvent != nil {
+		h.publish(protocol.EventPinCreated, req.WorkspaceID, "member", userID, map[string]any{"pin": pinnedItemToResponse(*pinProjectForEvent)})
+	}
+	if pinWelcomeIssueForEvent != nil {
+		h.publish(protocol.EventPinCreated, req.WorkspaceID, "member", userID, map[string]any{"pin": pinnedItemToResponse(*pinWelcomeIssueForEvent)})
+	}
+
+	writeJSON(w, http.StatusOK, importStarterContentResponse{
+		User:           userToResponse(updatedUser),
+		ProjectID:      uuidToString(project.ID),
+		WelcomeIssueID: welcomeIssueID,
+	})
+}
+
+type dismissStarterContentRequest struct {
+	// WorkspaceID is optional but strongly preferred — when present the
+	// server derives the starter branch (agent_guided / self_serve) by
+	// looking at the workspace's current agent list, so analytics can
+	// split dismiss rate by branch the same way import is split.
+	// Without it, branch defaults to self_serve (the zero-agent case).
+	WorkspaceID string `json:"workspace_id,omitempty"`
+}
+
+// DismissStarterContent records the user's decision to skip starter
+// content. Like Import, this is a NULL -> terminal transition; a
+// second call returns 409 with the current state.
+//
+// Emits `starter_content_decided` with `decision=dismissed`. The
+// `branch` property mirrors what ImportStarterContent would have
+// written for the same workspace, so the two-sided funnel (import vs
+// dismiss by branch) stays directly comparable.
+func (h *Handler) DismissStarterContent(w http.ResponseWriter, r *http.Request) {
+	userID, ok := requireUserID(w, r)
+	if !ok {
+		return
+	}
+
+	// Body is optional for backward-compat with callers that pre-date
+	// the workspace-id addition. An empty body is a legal dismiss.
+	var req dismissStarterContentRequest
+	if r.ContentLength > 0 {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err.Error() != "EOF" {
+			writeError(w, http.StatusBadRequest, "invalid request body")
+			return
+		}
+	}
+
+	user, err := h.Queries.GetUser(r.Context(), parseUUID(userID))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load user")
+		return
+	}
+	if user.StarterContentState.Valid {
+		writeJSON(w, http.StatusConflict, map[string]any{
+			"error": "starter content already decided",
+			"state": user.StarterContentState.String,
+		})
+		return
+	}
+
+	updated, err := h.Queries.SetStarterContentState(r.Context(), db.SetStarterContentStateParams{
+		ID:                  parseUUID(userID),
+		StarterContentState: pgtype.Text{String: "dismissed", Valid: true},
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to record dismiss")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, userToResponse(updated))
+}
+
+// strOrNullText converts an empty-meaning-absent string into a
+// nullable pgtype.Text. Empty -> SQL NULL; non-empty -> Valid.
+func strOrNullText(s string) pgtype.Text {
+	if s == "" {
+		return pgtype.Text{}
+	}
+	return pgtype.Text{String: s, Valid: true}
 }

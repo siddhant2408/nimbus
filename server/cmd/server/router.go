@@ -110,6 +110,8 @@ func (r *router) addProtectedAPIRoutes(queries *db.Queries, h *handler.Handler) 
 		r.Patch("/api/me", h.UpdateMe)
 		r.Patch("/api/me/onboarding", h.PatchOnboarding)
 		r.Post("/api/me/onboarding/complete", h.CompleteOnboarding)
+		r.Post("/api/me/starter-content/import", h.ImportStarterContent)
+		r.Post("/api/me/starter-content/dismiss", h.DismissStarterContent)
 
 		r.Route("/api/workspaces", func(r chi.Router) {
 			r.Get("/", h.ListWorkspaces)
@@ -119,6 +121,7 @@ func (r *router) addProtectedAPIRoutes(queries *db.Queries, h *handler.Handler) 
 				r.Group(func(r chi.Router) {
 					r.Use(middleware.RequireWorkspaceMemberFromURL(queries, "id"))
 					r.Get("/", h.GetWorkspace)
+					r.Get("/members", h.ListMembersWithUser)
 				})
 				// Admin-level access
 				r.Group(func(r chi.Router) {
@@ -180,6 +183,29 @@ func (r *router) addProtectedAPIRoutes(queries *db.Queries, h *handler.Handler) 
 				r.Post("/archive-completed", h.ArchiveCompletedInbox)
 				r.Post("/{id}/read", h.MarkInboxRead)
 				r.Post("/{id}/archive", h.ArchiveInboxItem)
+			})
+
+			// Projects
+			r.Route("/api/projects", func(r chi.Router) {
+				r.Get("/search", h.SearchProjects)
+				r.Get("/", h.ListProjects)
+				r.Post("/", h.CreateProject)
+				r.Route("/{id}", func(r chi.Router) {
+					r.Get("/", h.GetProject)
+					r.Put("/", h.UpdateProject)
+					r.Delete("/", h.DeleteProject)
+					r.Get("/resources", h.ListProjectResources)
+					r.Post("/resources", h.CreateProjectResource)
+					r.Delete("/resources/{resourceId}", h.DeleteProjectResource)
+				})
+			})
+
+			// Pins
+			r.Route("/api/pins", func(r chi.Router) {
+				r.Get("/", h.ListPins)
+				r.Post("/", h.CreatePin)
+				r.Put("/reorder", h.ReorderPins)
+				r.Delete("/{itemType}/{itemId}", h.DeletePin)
 			})
 		})
 	})
