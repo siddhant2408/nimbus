@@ -1,0 +1,21 @@
+{
+  "$schema": "https://ui.shadcn.com/schema.json",
+  "style": "base-nova",
+  "rsc": false,
+  "tsx": true,
+  "tailwind": {
+    "config": "",
+    "css": "styles/tokens.css",
+    "baseColor": "zinc",
+    "cssVariables": true,
+    "prefix": ""
+  },
+  "iconLibrary": "lucide",
+  "aliases": {
+    "components": "@nimbus/ui/components",
+    "ui": "@nimbus/ui/components/ui",
+    "hooks": "@nimbus/ui/hooks",
+    "lib": "@nimbus/ui/lib",
+    "utils": "@nimbus/ui/lib/utils"
+  }
+}

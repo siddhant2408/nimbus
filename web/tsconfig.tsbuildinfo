@@ -1,1 +1,0 @@
-{"root":["./src/app.tsx","./src/main.tsx","./src/api/client.ts","./src/components/dashboard.tsx","./src/components/metricscards.tsx","./src/components/personamanager.tsx","./src/components/retrytable.tsx","./src/components/runningtable.tsx","./src/hooks/usequeries.ts","./src/types/api.ts"],"version":"5.9.3"}
