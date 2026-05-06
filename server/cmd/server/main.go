@@ -8,17 +8,16 @@ import (
 
 	"github.com/siddhant2408/nimbus/internal/events"
 	"github.com/siddhant2408/nimbus/internal/logger"
+	"github.com/siddhant2408/nimbus/internal/realtime"
+	db "github.com/siddhant2408/nimbus/pkg/db/generated"
 )
 
 var version = "dev"
 
 func main() {
 	logger.Init()
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		dbURL = "postgres://nimbus:nimbus@localhost:5433/nimbus?sslmode=disable"
-	}
 
+	dbURL := os.Getenv("DATABASE_URL")
 	// Connect to database
 	ctx := context.Background()
 	pool, err := newDBPool(ctx, dbURL)
@@ -36,8 +35,21 @@ func main() {
 	logPoolConfig(pool)
 
 	bus := events.New()
+	hub := realtime.NewHub()
+	go hub.Run()
+
+	//TODO reuse db.new call
+	queries := db.New(pool)
+	hub.SetAuthorizer(newScopeAuthorizer(queries))
+
+	//add listeners
+	registerListeners(bus, hub)
+	registerSubscriberListeners(bus, queries)
+	registerActivityListeners(bus, queries)
+	registerNotificationListeners(bus, queries)
+
 	// router
-	r := newRouterWithOptions(pool, bus, routerOptions{})
+	r := newRouterWithOptions(pool, bus, hub, routerOptions{})
 
 	port := os.Getenv("PORT")
 	if port == "" {

@@ -15,6 +15,7 @@ import (
 	"github.com/siddhant2408/nimbus/internal/auth"
 	"github.com/siddhant2408/nimbus/internal/events"
 	"github.com/siddhant2408/nimbus/internal/middleware"
+	"github.com/siddhant2408/nimbus/internal/realtime"
 	"github.com/siddhant2408/nimbus/internal/storage"
 	"github.com/siddhant2408/nimbus/internal/util"
 	db "github.com/siddhant2408/nimbus/pkg/db/generated"
@@ -41,6 +42,7 @@ type dbExecutor interface {
 type Handler struct {
 	Queries          *db.Queries
 	DB               dbExecutor
+	Hub              *realtime.Hub
 	Bus              *events.Bus
 	TxStarter        txStarter
 	PATCache         *auth.PATCache
@@ -48,7 +50,7 @@ type Handler struct {
 	DaemonTokenCache *auth.DaemonTokenCache
 }
 
-func New(queries *db.Queries, txStarter txStarter, store storage.Storage, bus *events.Bus) *Handler {
+func New(queries *db.Queries, txStarter txStarter, store storage.Storage, bus *events.Bus, hub *realtime.Hub) *Handler {
 	var executor dbExecutor
 	if candidate, ok := txStarter.(dbExecutor); ok {
 		executor = candidate
@@ -60,6 +62,7 @@ func New(queries *db.Queries, txStarter txStarter, store storage.Storage, bus *e
 		TxStarter: txStarter,
 		Storage:   store,
 		Bus:       bus,
+		Hub:       hub,
 	}
 }
 
@@ -437,4 +440,41 @@ func (h *Handler) isWorkspaceEntity(ctx context.Context, userType, userID, works
 	default:
 		return false
 	}
+}
+
+func (h *Handler) loadInboxItemForUser(w http.ResponseWriter, r *http.Request, itemID string) (db.InboxItem, bool) {
+	userID, ok := requireUserID(w, r)
+	if !ok {
+		return db.InboxItem{}, false
+	}
+
+	workspaceID := h.resolveWorkspaceID(r)
+	if workspaceID == "" {
+		writeError(w, http.StatusBadRequest, "workspace_id is required")
+		return db.InboxItem{}, false
+	}
+
+	itemUUID, ok := parseUUIDOrBadRequest(w, itemID, "inbox item id")
+	if !ok {
+		return db.InboxItem{}, false
+	}
+	wsUUID, ok := parseUUIDOrBadRequest(w, workspaceID, "workspace id")
+	if !ok {
+		return db.InboxItem{}, false
+	}
+
+	item, err := h.Queries.GetInboxItemInWorkspace(r.Context(), db.GetInboxItemInWorkspaceParams{
+		ID:          itemUUID,
+		WorkspaceID: wsUUID,
+	})
+	if err != nil {
+		writeError(w, http.StatusNotFound, "inbox item not found")
+		return db.InboxItem{}, false
+	}
+
+	if item.RecipientType != "member" || uuidToString(item.RecipientID) != userID {
+		writeError(w, http.StatusNotFound, "inbox item not found")
+		return db.InboxItem{}, false
+	}
+	return item, true
 }
