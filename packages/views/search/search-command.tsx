@@ -27,7 +27,7 @@ import { Command as CommandPrimitive } from "cmdk";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { SearchIssueResult, SearchProjectResult } from "@nimbus/core/types";
-import { api } from "@nimbus/core/api";
+import { api, ApiError } from "@nimbus/core/api";
 import { useRecentIssuesStore } from "@nimbus/core/issues/stores";
 import { issueDetailOptions } from "@nimbus/core/issues/queries";
 import { useWorkspaceId } from "@nimbus/core";
@@ -139,6 +139,7 @@ export function SearchCommand() {
   const open = useSearchStore((s) => s.open);
   const setOpen = useSearchStore((s) => s.setOpen);
   const recentItems = useRecentIssuesStore((s) => s.items);
+  const removeRecentItem = useRecentIssuesStore((s) => s.removeItem);
   const wsId = useWorkspaceId();
   const p: WorkspacePaths = useWorkspacePaths();
   const { theme, setTheme } = useTheme();
@@ -150,8 +151,20 @@ export function SearchCommand() {
   // if not, this triggers a lookup per id so Recent never depends on whether
   // the issue falls inside the paginated list cache.
   const recentDetailQueries = useQueries({
-    queries: recentItems.map((item) => issueDetailOptions(wsId, item.id)),
+    queries: recentItems.map((item) => ({
+      ...issueDetailOptions(wsId, item.id),
+      retry: false,
+    })),
   });
+
+  useEffect(() => {
+    recentDetailQueries.forEach((q, i) => {
+      if (q.isError && q.error instanceof ApiError && q.error.status === 404) {
+        removeRecentItem(recentItems[i]!.id);
+      }
+    });
+  }, [recentDetailQueries, recentItems, removeRecentItem]);
+
   const recentIssues = useMemo(
     () =>
       recentDetailQueries.flatMap((q) => (q.data ? [q.data] : [])),

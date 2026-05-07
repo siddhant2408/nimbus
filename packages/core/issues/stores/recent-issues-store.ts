@@ -18,6 +18,7 @@ export interface RecentIssueEntry {
 interface RecentIssuesState {
   items: RecentIssueEntry[];
   recordVisit: (id: string) => void;
+  removeItem: (id: string) => void;
 }
 
 export const useRecentIssuesStore = create<RecentIssuesState>()(
@@ -32,6 +33,8 @@ export const useRecentIssuesStore = create<RecentIssuesState>()(
             items: [updated, ...filtered].slice(0, MAX_RECENT_ISSUES),
           };
         }),
+      removeItem: (id) =>
+        set((state) => ({ items: state.items.filter((i) => i.id !== id) })),
     }),
     {
       name: "nimbus_recent_issues",
