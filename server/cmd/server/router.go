@@ -207,6 +207,12 @@ func (r *router) addProtectedAPIRoutes(queries *db.Queries, h *handler.Handler) 
 				r.Put("/reorder", h.ReorderPins)
 				r.Delete("/{itemType}/{itemId}", h.DeletePin)
 			})
+
+			// Notification preferences
+			r.Route("/api/notification-preferences", func(r chi.Router) {
+				r.Get("/", h.GetNotificationPreferences)
+				r.Put("/", h.UpdateNotificationPreferences)
+			})
 		})
 	})
 	return r
