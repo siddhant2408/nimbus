@@ -16,6 +16,7 @@ import (
 	"github.com/siddhant2408/nimbus/internal/events"
 	"github.com/siddhant2408/nimbus/internal/middleware"
 	"github.com/siddhant2408/nimbus/internal/realtime"
+	"github.com/siddhant2408/nimbus/internal/service"
 	"github.com/siddhant2408/nimbus/internal/storage"
 	"github.com/siddhant2408/nimbus/internal/util"
 	db "github.com/siddhant2408/nimbus/pkg/db/generated"
@@ -48,6 +49,7 @@ type Handler struct {
 	PATCache         *auth.PATCache
 	Storage          storage.Storage
 	DaemonTokenCache *auth.DaemonTokenCache
+	TaskService      *service.TaskService
 }
 
 func New(queries *db.Queries, txStarter txStarter, store storage.Storage, bus *events.Bus, hub *realtime.Hub) *Handler {
@@ -56,13 +58,15 @@ func New(queries *db.Queries, txStarter txStarter, store storage.Storage, bus *e
 		executor = candidate
 	}
 
+	taskSvc := service.NewTaskService(queries, txStarter, hub, bus, nil)
 	return &Handler{
-		Queries:   queries,
-		DB:        executor,
-		TxStarter: txStarter,
-		Storage:   store,
-		Bus:       bus,
-		Hub:       hub,
+		Queries:     queries,
+		DB:          executor,
+		TxStarter:   txStarter,
+		Storage:     store,
+		Bus:         bus,
+		Hub:         hub,
+		TaskService: taskSvc,
 	}
 }
 
@@ -477,4 +481,35 @@ func (h *Handler) loadInboxItemForUser(w http.ResponseWriter, r *http.Request, i
 		return db.InboxItem{}, false
 	}
 	return item, true
+}
+
+func (h *Handler) loadAgentForUser(w http.ResponseWriter, r *http.Request, agentID string) (db.Agent, bool) {
+	if _, ok := requireUserID(w, r); !ok {
+		return db.Agent{}, false
+	}
+
+	workspaceID := h.resolveWorkspaceID(r)
+	if workspaceID == "" {
+		writeError(w, http.StatusBadRequest, "workspace_id is required")
+		return db.Agent{}, false
+	}
+
+	agentUUID, ok := parseUUIDOrBadRequest(w, agentID, "agent id")
+	if !ok {
+		return db.Agent{}, false
+	}
+	wsUUID, ok := parseUUIDOrBadRequest(w, workspaceID, "workspace id")
+	if !ok {
+		return db.Agent{}, false
+	}
+
+	agent, err := h.Queries.GetAgentInWorkspace(r.Context(), db.GetAgentInWorkspaceParams{
+		ID:          agentUUID,
+		WorkspaceID: wsUUID,
+	})
+	if err != nil {
+		writeError(w, http.StatusNotFound, "agent not found")
+		return db.Agent{}, false
+	}
+	return agent, true
 }
